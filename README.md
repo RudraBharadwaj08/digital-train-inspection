@@ -78,20 +78,10 @@ DevicePreview(
 
 ---
 
-## 🛠 Firebase API
-
-**POST Submission**
-- Endpoint: `https://your-project-id.firebaseio.com/submissions.json`
-- Payload: JSON with station, trainNumber, date, scores, etc.
-
-**GET Submissions**
-- Endpoint: `https://your-project-id.firebaseio.com/submissions.json`
-
----
 
 ## 📸 Screenshots
 
-*Coming Soon – Add demo images or screen recordings here.*
+*Coming Soon –
 
 ---
 
