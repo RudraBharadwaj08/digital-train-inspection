@@ -1,6 +1,7 @@
 // lib/screens/score_summary.dart
 import 'package:flutter/material.dart';
 import 'scorecard_form.dart'; // import your model or data structures
+import 'package:shopping_list/models/score_entry.dart';
 
 class ScoreSummaryScreen extends StatelessWidget {
   final Map<String, List<ScoreEntry>> coachWiseScores;

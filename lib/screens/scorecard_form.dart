@@ -1,24 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:shopping_list/models/score_entry.dart';
 import 'package:shopping_list/screens/score_summary.dart';
 import 'package:shopping_list/screens/submission_list_screen.dart';
 
-
-class ScoreEntry {
-  final String label;
-  int? score;
-  String? remarks;
-
-  ScoreEntry({required this.label, this.score, this.remarks});
-}
+import '../widgets/score_input_tile.dart';
 
 class ScorecardFormScreen extends StatefulWidget {
   final String username;
-  const ScorecardFormScreen({super.key, required this.username});
+  final String stationName;
+  final String trainNumber;
+
+
+  const ScorecardFormScreen({super.key, required this.username, required this.stationName, required this.trainNumber});
 
   @override
   State<ScorecardFormScreen> createState() => _ScorecardFormScreenState();
@@ -28,67 +27,160 @@ class _ScorecardFormScreenState extends State<ScorecardFormScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final Map<String, List<ScoreEntry>> _coachWiseScores = {};
-  final TextEditingController _stationController = TextEditingController();
-  final TextEditingController _trainController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 13, vsync: this);
+    _tabController = TabController(length: 13, vsync: this); // C1 to C13
 
     for (int i = 1; i <= 13; i++) {
-      final String coachId = 'C$i';
-      List<ScoreEntry> entries = [];
-
-      for (int t = 1; t <= 4; t++) {
-        entries.add(ScoreEntry(label: '$coachId - Toilet T$t'));
-      }
-
-      entries.addAll([
-        ScoreEntry(label: '$coachId - Vestibule B1'),
-        ScoreEntry(label: '$coachId - Vestibule B2'),
-        ScoreEntry(label: '$coachId - Doorway D1'),
-        ScoreEntry(label: '$coachId - Doorway D2'),
-      ]);
-
-      _coachWiseScores[coachId] = entries;
+      final coachId = 'C$i';
+      _coachWiseScores[coachId] = [
+        for (int t = 1; t <= 4; t++)
+          ScoreEntry(label: 'Toilet T$t'),
+        ScoreEntry(label: 'Vestibule B1'),
+        ScoreEntry(label: 'Vestibule B2'),
+        ScoreEntry(label: 'Doorway D1'),
+        ScoreEntry(label: 'Doorway D2'),
+      ];
     }
   }
 
   Future<void> _generatePdf() async {
     final pdf = pw.Document();
 
+    final coaches = _coachWiseScores.keys.toList();
+
+    final allLabels = <String>{};
+    for (var scores in _coachWiseScores.values) {
+      for (var entry in scores) {
+        allLabels.add(entry.label);
+      }
+    }
+    final labelsList = allLabels.toList()..sort();
+
+    String scoreText(String coachId, String label) {
+      final entries = _coachWiseScores[coachId]!;
+      final entry = entries.firstWhere(
+            (e) => e.label == label,
+        orElse: () => ScoreEntry(label: label, score: null, remarks: null),
+      );
+      return entry.score?.toString() ?? '-';
+    }
+
+    String remarksText(String coachId, String label) {
+      final entries = _coachWiseScores[coachId]!;
+      final entry = entries.firstWhere(
+            (e) => e.label == label,
+        orElse: () => ScoreEntry(label: label, score: null, remarks: null),
+      );
+      final r = entry.remarks?.trim();
+      if (r == null || r.isEmpty) return '';
+      return r;
+    }
+
+    final half = (coaches.length / 2).ceil();
+    final firstHalf = coaches.sublist(0, half);
+    final secondHalf = coaches.sublist(half);
+
+    pw.Widget buildCoachTable(List<String> coachSubset) {
+      final headers = <pw.Widget>[
+        pw.Container(
+          padding: const pw.EdgeInsets.all(6),
+          child: pw.Text('Item',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+        )
+      ];
+      headers.addAll(coachSubset.map((c) => pw.Container(
+        padding: const pw.EdgeInsets.all(6),
+        alignment: pw.Alignment.center,
+        child: pw.Text(c,
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+      )));
+
+      final rows = <pw.TableRow>[];
+      rows.add(pw.TableRow(
+        children: headers,
+        decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+      ));
+
+      for (var label in labelsList) {
+        final scoreCells = <pw.Widget>[
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text(label,
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+          ),
+        ];
+        final remarksCells = <pw.Widget>[
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text(''),
+          ),
+        ];
+
+        for (var coach in coachSubset) {
+          scoreCells.add(pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text(scoreText(coach, label),
+                textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 13)),
+          ));
+          remarksCells.add(pw.Padding(
+            padding: const pw.EdgeInsets.all(6),
+            child: pw.Text(
+              remarksText(coach, label),
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800),
+              textAlign: pw.TextAlign.center,
+            ),
+          ));
+        }
+
+        rows.add(pw.TableRow(children: scoreCells));
+        rows.add(pw.TableRow(children: remarksCells));
+      }
+
+      return pw.Table(
+        border: pw.TableBorder.all(width: 0.7, color: PdfColors.grey),
+        children: rows,
+        defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+        columnWidths: {
+          0: pw.FlexColumnWidth(3),
+          for (int i = 1; i <= coachSubset.length; i++) i: pw.FlexColumnWidth(1),
+        },
+      );
+    }
+
     pdf.addPage(
       pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
         build: (context) => [
           pw.Text('Train Cleanliness Score Card',
-              style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 10),
-          pw.Text('Station: ${_stationController.text}'),
-          pw.Text('Train No.: ${_trainController.text}'),
-          pw.Text('Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate)}'),
-          pw.SizedBox(height: 20),
-          ..._coachWiseScores.entries.map((entry) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text('Coach ${entry.key}',
-                    style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                pw.Table.fromTextArray(
-                  headers: ['Label', 'Score', 'Remarks'],
-                  data: entry.value
-                      .map((e) => [
-                    e.label,
-                    e.score?.toString() ?? '-',
-                    e.remarks ?? '-'
-                  ])
-                      .toList(),
-                ),
-                pw.SizedBox(height: 15),
-              ],
-            );
-          }).toList(),
+              style:  pw.TextStyle(fontSize: 28, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 15),
+          pw.Text('Station: ${widget.stationName}', style: const pw.TextStyle(fontSize: 16)),
+          pw.Text('Train No.: ${widget.trainNumber}', style: const pw.TextStyle(fontSize: 16)),
+          pw.Text('Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate)}',
+              style: const pw.TextStyle(fontSize: 16)),
+          pw.SizedBox(height: 25),
+          buildCoachTable(firstHalf),
+        ],
+      ),
+    );
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (context) => [
+          pw.Text('Train Cleanliness Score Card (contd.)',
+              style:  pw.TextStyle(fontSize: 28, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 15),
+          pw.Text('Station: ${widget.stationName}', style: const pw.TextStyle(fontSize: 16)),
+          pw.Text('Train No.: ${widget.trainNumber}', style: const pw.TextStyle(fontSize: 16)),
+          pw.Text('Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate)}',
+              style: const pw.TextStyle(fontSize: 16)),
+          pw.SizedBox(height: 25),
+          buildCoachTable(secondHalf),
         ],
       ),
     );
@@ -96,8 +188,11 @@ class _ScorecardFormScreenState extends State<ScorecardFormScreen>
     await Printing.layoutPdf(onLayout: (format) => pdf.save());
   }
 
+
+
+
   Future<void> _submitForm() async {
-    if (_stationController.text.isEmpty || _trainController.text.isEmpty) {
+    if (widget.stationName.isEmpty || widget.trainNumber.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter Station and Train Number')),
       );
@@ -106,18 +201,20 @@ class _ScorecardFormScreenState extends State<ScorecardFormScreen>
 
     final Map<String, dynamic> data = {
       'username': widget.username,
-      'station': _stationController.text,
-      'trainNumber': _trainController.text,
+      'station': widget.stationName,
+      'trainNumber': widget.trainNumber,
       'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
       'submittedAt': DateTime.now().toIso8601String(),
       'scores': _coachWiseScores.map((coachId, entries) {
         return MapEntry(
           coachId,
-          entries.map((e) => {
+          entries
+              .map((e) => {
             'label': e.label,
             'score': e.score ?? 0,
             'remarks': e.remarks ?? '',
-          }).toList(),
+          })
+              .toList(),
         );
       }),
     };
@@ -147,188 +244,278 @@ class _ScorecardFormScreenState extends State<ScorecardFormScreen>
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final remarksFieldWidth = screenWidth * 0.4;
+    int _selectedIndex = 0;
+    int? _hoveredIndex;
+    bool isDateSelected = _selectedDate != null;
+
+
+
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Digital Score Card Form'),
+        backgroundColor: Colors.blue.shade700,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.stationName,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                shadows: [
+                  Shadow(
+                    offset: Offset(0, 1),
+                    blurRadius: 3,
+                    color: Colors.black45,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Train No: ${widget.trainNumber}',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.blue.shade100,
+                fontWeight: FontWeight.w600,
+                shadows: const [
+                  Shadow(
+                    offset: Offset(0, 1),
+                    blurRadius: 2,
+                    color: Colors.black26,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          tabs: [
-            for (int i = 1; i <= 13; i++) Tab(text: 'C$i'),
-          ],
+          indicatorColor: Colors.amberAccent,
+          labelColor: Colors.white,      // <-- set selected tab label color to white
+          unselectedLabelColor: Colors.white70,  // <-- unselected tabs a bit faded white
+          tabs: [for (int i = 1; i <= 13; i++) Tab(text: 'C$i')],
         ),
+
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          return SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: IntrinsicHeight(
-                child: Column(
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now(), // Prevent future dates
+                    );
+                    if (pickedDate != null) {
+                      setState(() {
+                        _selectedDate = pickedDate;
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_today_outlined, size: 18),
+                  label: const Text('Pick Date'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                ),
+
+
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        children: [
-                          TextField(
-                            controller: _stationController,
-                            decoration: const InputDecoration(labelText: 'Station Name'),
-                          ),
-                          TextField(
-                            controller: _trainController,
-                            decoration: const InputDecoration(labelText: 'Train Number'),
-                            keyboardType: TextInputType.number,
-                          ),
-                          Row(
-                            children: [
-                              Text('Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate)}'),
-                              IconButton(
-                                icon: const Icon(Icons.calendar_today),
-                                onPressed: () async {
-                                  final pickedDate = await showDatePicker(
-                                    context: context,
-                                    initialDate: _selectedDate,
-                                    firstDate: DateTime(2000),
-                                    lastDate: DateTime(2100),
-                                  );
-                                  if (pickedDate != null) {
-                                    setState(() {
-                                      _selectedDate = pickedDate;
-                                    });
-                                  }
-                                },
-                              )
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            alignment: WrapAlignment.center,
-                            children: [
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.print),
-                                label: const Text('Print Summary'),
-                                onPressed: _generatePdf,
-                              ),
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.send),
-                                label: const Text('Submit'),
-                                onPressed: _submitForm,
-                              ),
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.list_alt),
-                                label: const Text('Review Summary'),
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) => ScoreSummaryScreen(
-                                        coachWiseScores: _coachWiseScores,
-                                        stationName: _stationController.text,
-                                        trainNumber: _trainController.text,
-                                        inspectionDate: _selectedDate,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.history),
-                                label: const Text('View Submissions'),
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) => SubmissionListScreen(username: widget.username),
-                                    ),
-                                  );
-                                },
-                              ),
-
-
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: SizedBox(
-                        height: constraints.maxHeight * 0.7,
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            for (int i = 1; i <= 13; i++) _buildCoachForm('C$i')
-                          ],
-                        ),
-                      ),
-                    ),
+                    for (int i = 1; i <= 13; i++) _buildCoachForm('C$i', remarksFieldWidth),
                   ],
                 ),
               ),
-            ),
+            ],
           );
         },
+      ),
+      bottomNavigationBar: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+        child: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          selectedItemColor: Theme.of(context).colorScheme.primary,
+          unselectedItemColor: Colors.grey[600],
+          showSelectedLabels: false,
+          showUnselectedLabels: false,
+          elevation: 10,
+          currentIndex: _selectedIndex,
+          onTap: (index) {
+            setState(() => _selectedIndex = index);
+
+            switch (index) {
+              case 0:
+                _generatePdf();
+                break;
+              case 1:
+                _submitForm();
+                break;
+              case 2:
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => ScoreSummaryScreen(
+                      coachWiseScores: _coachWiseScores,
+                      stationName: widget.stationName,
+                      trainNumber: widget.trainNumber,
+                      inspectionDate: _selectedDate,
+                    ),
+                  ),
+                );
+                break;
+              case 3:
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => SubmissionListScreen(username: widget.username),
+                  ),
+                );
+                break;
+            }
+          },
+          items: List.generate(4, (index) {
+            final icons = [
+              Icons.print,
+              Icons.send,
+              Icons.list_alt,
+              Icons.history,
+            ];
+            final labels = ['Print', 'Submit', 'Review', 'History'];
+
+            return BottomNavigationBarItem(
+              label: labels[index],
+              icon: MouseRegion(
+                onEnter: (_) {
+                  setState(() => _hoveredIndex = index);
+                },
+                onExit: (_) {
+                  setState(() => _hoveredIndex = null);
+                },
+                child: AnimatedScale(
+                  scale: (_selectedIndex == index || _hoveredIndex == index) ? 1.3 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  child: Icon(icons[index]),
+                ),
+              ),
+            );
+          }),
+        ),
       ),
     );
   }
 
-  Widget _buildCoachForm(String coachId) {
+
+  Widget _buildCoachForm(String coachId, double remarksFieldWidth) {
     final entries = _coachWiseScores[coachId]!;
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: entries.length,
-      itemBuilder: (context, index) {
-        final entry = entries[index];
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(entry.label, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Text('Score:'),
-                    const SizedBox(width: 8),
-                    DropdownButton<int>(
-                      value: entry.score,
-                      hint: const Text('Select'),
-                      items: List.generate(10, (i) => i + 1)
-                          .map((score) => DropdownMenuItem(
-                        value: score,
-                        child: Text(score.toString()), // <--- Default key reused!
-                      ))
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          entry.score = value;
-                        });
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        headingRowColor: MaterialStateProperty.resolveWith((states) => Colors.blue.shade100),
+        columnSpacing: 20,
+        columns: const [
+          DataColumn(
+              label: Text('S. No.',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          DataColumn(
+              label: Text('Item',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          DataColumn(
+              label: Text('Score',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          DataColumn(
+              label: Text('Remarks',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+        ],
+        rows: List<DataRow>.generate(entries.length, (index) {
+          final entry = entries[index];
+
+          return DataRow(
+            color: MaterialStateProperty.resolveWith<Color?>(
+                    (Set<MaterialState> states) {
+                  return index.isEven ? Colors.blue.shade50 : null;
+                }),
+            cells: [
+              DataCell(Text('${index + 1}')),
+              DataCell(Text(entry.label)),
+              DataCell(
+                DropdownButton<int?>(
+                  value: entry.score,
+                  hint: const Text('-'),
+                  underline: const SizedBox(),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('-'),
+                    ),
+                    ...List.generate(
+                      10,
+                          (i) => DropdownMenuItem<int?>(
+                        value: i + 1,
+                        child: Text('${i + 1}'),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      entry.score = value;
+                    });
+                  },
+                ),
+              ),
+              DataCell(
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: SizedBox(
+                    width: remarksFieldWidth < 180 ? 180 : remarksFieldWidth,
+                    child: TextFormField(
+                      initialValue: entry.remarks ?? '',
+                      decoration: const InputDecoration(
+                        hintText: 'Optional',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                        contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      ),
+                      onChanged: (text) {
+                        entry.remarks = text;
                       },
                     ),
-
-                  ],
+                  ),
                 ),
-                TextField(
-                  decoration: const InputDecoration(labelText: 'Remarks (optional)'),
-                  onChanged: (value) => entry.remarks = value,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+              ),
+            ],
+          );
+        }),
+      ),
     );
   }
 
   @override
   void dispose() {
-    _stationController.dispose();
-    _trainController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -366,7 +553,7 @@ class _SubmissionListScreenState extends State<SubmissionListScreen> {
 
       data.forEach((key, value) {
         if (value['username'] == widget.username) {
-          value['id'] = key; // Store Firebase key for delete
+          value['id'] = key;
           loaded.add(value);
         }
       });
@@ -425,7 +612,10 @@ class _SubmissionListScreenState extends State<SubmissionListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Submission History')),
+      appBar: AppBar(
+        title: const Text('Submission History'),
+        backgroundColor: Colors.blue.shade700,
+      ),
       body: Column(
         children: [
           Padding(
@@ -436,12 +626,15 @@ class _SubmissionListScreenState extends State<SubmissionListScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Filter by Station',
                     prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    isDense: true,
                   ),
                   onChanged: (value) {
                     _stationFilter = value;
                     _applyFilters();
                   },
                 ),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
@@ -449,6 +642,7 @@ class _SubmissionListScreenState extends State<SubmissionListScreen> {
                         _selectedDate == null
                             ? 'Filter by Date: None'
                             : 'Filter by Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate!)}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
                     TextButton(
@@ -470,6 +664,7 @@ class _SubmissionListScreenState extends State<SubmissionListScreen> {
                       IconButton(
                         icon: const Icon(Icons.clear),
                         onPressed: _resetFilters,
+                        tooltip: 'Clear Date Filter',
                       )
                   ],
                 ),
@@ -481,23 +676,50 @@ class _SubmissionListScreenState extends State<SubmissionListScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : _filteredSubmissions.isEmpty
                 ? const Center(child: Text('No submissions match your filter.'))
-                : ListView.builder(
+                : GridView.builder(
+              padding: const EdgeInsets.all(10),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 1.2,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+              ),
               itemCount: _filteredSubmissions.length,
               itemBuilder: (ctx, i) {
                 final sub = _filteredSubmissions[i];
-                return ListTile(
-                  leading: const Icon(Icons.description),
-                  title: Text('${sub['station']} | Train ${sub['trainNumber']}'),
-                  subtitle: Text('Date: ${sub['date']}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete),
-                    onPressed: () => _deleteSubmission(sub['id']),
-                  ),
+                return GestureDetector(
                   onTap: () {
                     Navigator.of(context).push(MaterialPageRoute(
                       builder: (context) => SubmissionDetailScreen(submission: sub),
                     ));
                   },
+                  child: Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.description, size: 30, color: Colors.blueAccent),
+                          Text('Station: ${sub['station']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text('Train: ${sub['trainNumber']}'),
+                          Text('Date: ${sub['date']}'),
+                          Align(
+                            alignment: Alignment.bottomRight,
+                            child: IconButton(
+                              icon: const Icon(Icons.delete, size: 20, color: Colors.redAccent),
+                              onPressed: () => _deleteSubmission(sub['id']),
+                              tooltip: 'Delete Submission',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 );
               },
             ),
@@ -524,10 +746,14 @@ class SubmissionDetailScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Submission Details'),
+        backgroundColor: Colors.blue.shade700,
         actions: [
           IconButton(
             icon: const Icon(Icons.picture_as_pdf),
-            onPressed: () => _exportAsPdf(context, station, trainNumber, date, inspector, scores),
+            tooltip: 'Export as PDF',
+            onPressed: () =>
+                _exportAsPdf(
+                    context, station, trainNumber, date, inspector, scores),
           )
         ],
       ),
@@ -539,18 +765,22 @@ class SubmissionDetailScreen extends StatelessWidget {
           _buildInfoRow('Date', date),
           _buildInfoRow('Inspector', inspector),
           const SizedBox(height: 20),
-          const Text('Coach-wise Scores:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('Coach-wise Scores:',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           ...scores.entries.map((coach) {
             final List<dynamic> entries = coach.value;
             return ExpansionTile(
               title: Text('Coach ${coach.key}'),
               children: entries.map((entry) {
+                final remarks = (entry['remarks']
+                    ?.toString()
+                    .trim()
+                    .isEmpty ?? true) ? '-' : entry['remarks'];
                 return ListTile(
                   title: Text(entry['label'] ?? '-'),
-                  subtitle: Text(
-                    'Score: ${entry['score'] ?? '-'} • Remarks: ${entry['remarks']?.toString().trim().isEmpty ?? true ? '-' : entry['remarks']}',
-                  ),
+                  subtitle: Text('Score: ${entry['score'] ??
+                      '-'} • Remarks: $remarks'),
                 );
               }).toList(),
             );
@@ -562,7 +792,7 @@ class SubmissionDetailScreen extends StatelessWidget {
 
   Widget _buildInfoRow(String title, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
           Text('$title: ', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -572,45 +802,59 @@ class SubmissionDetailScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _exportAsPdf(
-      BuildContext context,
+  Future<void> _exportAsPdf(BuildContext context,
       String station,
       String trainNumber,
       String date,
       String inspector,
-      Map<String, dynamic> scores,
-      ) async {
+      Map<String, dynamic> scores,) async {
     final pdf = pw.Document();
 
     pdf.addPage(
       pw.MultiPage(
-        build: (pw.Context context) => [
-          pw.Text('Train Cleanliness Score Card',
-              style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 10),
+        build: (pw.Context context) =>
+        [
+          pw.Text(
+            'Train Cleanliness Score Card',
+            style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 12),
           pw.Text('Station: $station'),
           pw.Text('Train No.: $trainNumber'),
           pw.Text('Date: $date'),
           pw.Text('Inspector: $inspector'),
           pw.SizedBox(height: 20),
+
           ...scores.entries.map((entry) {
-            final List<dynamic> items = entry.value;
+            final String coachName = entry.key.toString();
+            final List<dynamic> items = entry.value ?? [];
+
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('Coach ${entry.key}',
-                    style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Text(
+                  'Coach $coachName',
+                  style: pw.TextStyle(
+                      fontSize: 18, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 8),
                 pw.Table.fromTextArray(
                   headers: ['Label', 'Score', 'Remarks'],
                   data: items.map((e) {
-                    return [
-                      e['label'] ?? '',
-                      (e['score'] ?? '-').toString(),
-                      (e['remarks']?.toString().trim().isEmpty ?? true) ? '-' : e['remarks'],
-                    ];
+                    final label = e['label'] ?? '';
+                    final score = (e['score'] ?? '-').toString();
+                    final remarks = (e['remarks']
+                        ?.toString()
+                        .trim()
+                        .isEmpty ?? true)
+                        ? '-'
+                        : e['remarks'];
+                    return [label, score, remarks];
                   }).toList(),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  cellAlignment: pw.Alignment.centerLeft,
                 ),
-                pw.SizedBox(height: 15),
+                pw.SizedBox(height: 16),
               ],
             );
           }).toList(),
