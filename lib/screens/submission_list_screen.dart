@@ -169,112 +169,194 @@ class _SubmissionListScreenState extends State<SubmissionListScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                DropdownButton<String>(
-                  value: _selectedStation,
-                  items: stations
-                      .map((s) =>
-                      DropdownMenuItem(value: s, child: Text(s)))
-                      .toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedStation = value!;
-                      _filterSubmissions();
-                    });
-                  },
-                ),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.calendar_today),
-                  label: Text(_selectedDate == null
-                      ? 'Filter by Date'
-                      : DateFormat('yyyy-MM-dd')
-                      .format(_selectedDate!)),
-                  onPressed: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: DateTime.now(),
-                      firstDate: DateTime(2023),
-                      lastDate: DateTime.now(),
-                    );
-                    if (picked != null) {
-                      setState(() {
-                        _selectedDate = picked;
-                        _filterSubmissions();
-                      });
-                    }
-                  },
-                ),
-                if (_selectedDate != null || _selectedStation != 'All')
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _selectedDate = null;
-                        _selectedStation = 'All';
-                        _filteredSubmissions = List.from(_submissions);
-                      });
-                    },
-                    child: const Text('Clear Filters'),
+          : SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Column(
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      children: [
+                        DropdownButton<String>(
+                          value: _selectedStation,
+                          items: stations
+                              .map((s) => DropdownMenuItem(
+                            value: s,
+                            child: Text(s),
+                          ))
+                              .toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedStation = value!;
+                              _filterSubmissions();
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 10),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.calendar_today),
+                          label: Text(_selectedDate == null
+                              ? 'Filter by Date'
+                              : DateFormat('yyyy-MM-dd')
+                              .format(_selectedDate!)),
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now(),
+                              firstDate: DateTime(2023),
+                              lastDate: DateTime.now(),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _selectedDate = picked;
+                                _filterSubmissions();
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 10),
+                        if (_selectedDate != null ||
+                            _selectedStation != 'All')
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _selectedDate = null;
+                                _selectedStation = 'All';
+                                _filteredSubmissions =
+                                    List.from(_submissions);
+                              });
+                            },
+                            child: const Text('Clear Filters'),
+                          ),
+                      ],
+                    ),
                   ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _filteredSubmissions.isEmpty
-                ? const Center(child: Text('No submissions found.'))
-                : ListView.builder(
-              itemCount: _filteredSubmissions.length,
-              itemBuilder: (ctx, i) {
-                final sub = _filteredSubmissions[i];
-                final originalIndex =
-                _submissions.indexOf(sub); // to get key for deletion
+                  Expanded(
+                    child: _filteredSubmissions.isEmpty
+                        ? const Center(child: Text('No submissions found.'))
+                        : ListView.builder(
+                      itemCount: _filteredSubmissions.length,
+                      itemBuilder: (ctx, i) {
+                        final sub = _filteredSubmissions[i];
+                        final originalIndex =
+                        _submissions.indexOf(sub);
 
-                return Dismissible(
-                  key: ValueKey(sub['trainNumber'] + sub['date']),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    color: Colors.red,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: const Icon(Icons.delete, color: Colors.white),
+                        return Dismissible(
+                          key: ValueKey(sub['trainNumber'] + sub['date']),
+                          direction: DismissDirection.endToStart,
+                          background: Container(
+                            color: Colors.red,
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: const Icon(Icons.delete, color: Colors.white),
+                          ),
+                          confirmDismiss: (_) async {
+                            return await showDialog<bool>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('Delete Confirmation'),
+                                content: const Text('Are you sure you want to delete this submission?'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+                                ],
+                              ),
+                            ) ??
+                                false;
+                          },
+                          onDismissed: (_) => _deleteSubmission(originalIndex),
+                          child: ListTile(
+                            leading: const Icon(Icons.description),
+                            title: Text('${sub['station']} - ${sub['trainNumber']}'),
+                            subtitle: Text('Date: ${sub['date']}'),
+                            trailing: PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert),
+                              onSelected: (value) {
+                                if (value == 'pdf') {
+                                  _exportSingleSubmissionAsPdf(sub);
+                                }
+                                // Add more options like 'view' if needed
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'pdf',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.picture_as_pdf, size: 18),
+                                      SizedBox(width: 8),
+                                      Text('Export PDF'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        );
+                      },
+                    ),
                   ),
-                  confirmDismiss: (_) async {
-                    return await showDialog<bool>(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: const Text('Delete Confirmation'),
-                        content: const Text('Are you sure you want to delete this submission?'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
-                        ],
-                      ),
-                    ) ??
-                        false;
-                  },
-                  onDismissed: (_) => _deleteSubmission(originalIndex),
-                  child: ListTile(
-                    leading: const Icon(Icons.description),
-                    title: Text('${sub['station']} - ${sub['trainNumber']}'),
-                    subtitle: Text('Date: ${sub['date']}'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {
-                      // Optional: Navigate to SubmissionDetailScreen
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
+}
+
+Future<void> _exportSingleSubmissionAsPdf(Map<String, dynamic> sub) async {
+  final pdf = pw.Document();
+
+  final String station = sub['station'] ?? '';
+  final String trainNumber = sub['trainNumber'] ?? '';
+  final String date = sub['date'] ?? '';
+  final String inspector = sub['username'] ?? '';
+  final Map<String, dynamic> scores = Map<String, dynamic>.from(sub['scores'] ?? {});
+
+  pdf.addPage(
+    pw.MultiPage(
+      build: (pw.Context context) => [
+        pw.Text('Train Cleanliness Score Card',
+            style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 12),
+        pw.Text('Station: $station'),
+        pw.Text('Train No.: $trainNumber'),
+        pw.Text('Date: $date'),
+        pw.Text('Inspector: $inspector'),
+        pw.SizedBox(height: 20),
+        ...scores.entries.map((entry) {
+          final List<dynamic> items = entry.value ?? [];
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('Coach ${entry.key}',
+                  style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 8),
+              pw.Table.fromTextArray(
+                headers: ['Label', 'Score', 'Remarks'],
+                data: items.map((e) {
+                  return [
+                    e['label'] ?? '',
+                    (e['score'] ?? '-').toString(),
+                    (e['remarks']?.toString().trim().isEmpty ?? true) ? '-' : e['remarks'],
+                  ];
+                }).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                cellAlignment: pw.Alignment.centerLeft,
+              ),
+              pw.SizedBox(height: 16),
+            ],
+          );
+        }).toList(),
+      ],
+    ),
+  );
+
+  await Printing.layoutPdf(onLayout: (format) => pdf.save());
 }

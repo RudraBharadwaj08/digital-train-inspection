@@ -1,14 +1,14 @@
-// main.dart
-
 import 'package:device_preview/device_preview.dart';
 import 'package:flutter/material.dart';
-import 'package:shopping_list/screens/login_screen.dart'; // <-- Add this
+import 'package:shopping_list/screens/login_screen.dart';
 
 void main() {
-  runApp(DevicePreview(
-    enabled: true,
-    builder: (context) => const ScoreCardApp(),
-  ));
+  runApp(
+    DevicePreview(
+      enabled: true,
+      builder: (context) => const ScoreCardApp(),
+    ),
+  );
 }
 
 class ScoreCardApp extends StatelessWidget {
@@ -21,30 +21,29 @@ class ScoreCardApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       useInheritedMediaQuery: true,
       builder: DevicePreview.appBuilder,
-      themeMode: ThemeMode.dark,
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
+      themeMode: ThemeMode.light,
+      theme: ThemeData(
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFE6F0FA), // Light bluish background
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.tealAccent,
-          brightness: Brightness.dark,
+          seedColor: Colors.lightBlueAccent,
+          brightness: Brightness.light,
         ),
-        scaffoldBackgroundColor: const Color(0xFF121212),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-          elevation: 2,
+          backgroundColor: Color(0xFFB3E5FC), // Soft blue AppBar
+          foregroundColor: Colors.black87,
         ),
         cardTheme: CardThemeData(
-          color: const Color(0xFF1E1E1E),
+          color: Colors.white,
           elevation: 4,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.tealAccent[700],
-            foregroundColor: Colors.black,
+            backgroundColor: Colors.lightBlueAccent,
+            foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -52,17 +51,17 @@ class ScoreCardApp extends StatelessWidget {
         ),
         inputDecorationTheme: const InputDecorationTheme(
           filled: true,
-          fillColor: Color(0xFF1F1F1F),
+          fillColor: Color(0xFFE0F7FA), // light blue input background
           border: OutlineInputBorder(),
-          labelStyle: TextStyle(color: Colors.white70),
+          labelStyle: TextStyle(color: Colors.black87),
         ),
         textTheme: const TextTheme(
-          bodyLarge: TextStyle(fontSize: 16),
-          bodyMedium: TextStyle(fontSize: 14),
-          titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          bodyLarge: TextStyle(fontSize: 16, color: Colors.black),
+          bodyMedium: TextStyle(fontSize: 14, color: Colors.black87),
+          titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
         ),
       ),
-      home: LoginScreen(), // 👈 Initial screen is now login
+      home: const LoginScreen(),
     );
   }
 }

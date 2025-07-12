@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
-import 'scorecard_form.dart'; // Make sure this import path is correct
+import 'scorecard_form.dart';
 
 class HomeScreen extends StatefulWidget {
   final String username;
+  final String stationName;
+  final String trainNumber;
 
-  const HomeScreen({super.key, required this.username});
+  const HomeScreen({
+    super.key,
+    required this.username,
+    required this.stationName,
+    required this.trainNumber,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -44,7 +51,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       body: TabBarView(
         controller: _tabController,
         children: [
-          ScorecardFormScreen(username: widget.username),
+          ScorecardFormScreen(
+            username: widget.username,
+            stationName: widget.stationName,
+            trainNumber: widget.trainNumber,
+          ),
           const Center(child: Text('Summary Tab - Coming Soon')),
           const Center(child: Text('Settings Tab - Coming Soon')),
         ],
